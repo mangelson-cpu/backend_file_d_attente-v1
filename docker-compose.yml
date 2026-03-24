@@ -414,7 +414,6 @@ services:
       - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
       # Project structure and seed data (Run AFTER migrations to ensure auth tables exist)
       - ./structure_seule.sql:/docker-entrypoint-initdb.d/migrations/999a-structure.sql:Z
-      - ./volumes/db/init/data.sql:/docker-entrypoint-initdb.d/migrations/999b-data.sql:Z
       # Use named volume to persist pgsodium decryption key between restarts
       - db-config:/etc/postgresql-custom
     healthcheck:
