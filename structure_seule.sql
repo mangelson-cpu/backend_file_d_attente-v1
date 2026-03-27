@@ -49,86 +49,166 @@ CREATE TYPE public.ticket_status AS ENUM (
 
 CREATE FUNCTION public.assign_role_secure(p_new_user_id uuid, p_email text, p_nom_user text, p_role text, p_agence_id uuid) RETURNS text
     LANGUAGE plpgsql
-    AS $$
-
-declare
-
-    current_role text;
-
-begin
-
-    -- Récupérer le rôle de l'utilisateur connecté
-
-    select role into current_role
-
-    from public.users
-
-    where id = auth.uid();
-
-
-
-    if current_role is null then
-
-        return 'Utilisateur non connecté';
-
-    end if;
-
-
-
-    -- Vérification des droits
-
-    if current_role = 'user' then
-
-        return 'Accès refusé : vous ne pouvez créer aucun utilisateur';
-
-    elsif current_role = 'admin' and p_role <> 'user' then
-
-        return 'Accès refusé : un admin ne peut créer que des users';
-
-    end if;
-
-
-
-    -- Insertion sécurisée dans public.users
-
-    insert into public.users (
-
-        id,
-
-        email,
-
-        nom_user,
-
-        role,
-
-        agence_id,
-
-        created_at
-
-    )
-
-    values (
-
-        p_new_user_id,
-
-        p_email,
-
-        p_nom_user,
-
-        p_role,
-
-        p_agence_id,
-
-        now()
-
-    );
-
-
-
-    return 'Utilisateur créé avec succès';
-
-end;
-
+    AS $$
+
+
+
+declare
+
+
+
+    current_role text;
+
+
+
+begin
+
+
+
+    -- Récupérer le rôle de l'utilisateur connecté
+
+
+
+    select role into current_role
+
+
+
+    from public.users
+
+
+
+    where id = auth.uid();
+
+
+
+
+
+
+
+    if current_role is null then
+
+
+
+        return 'Utilisateur non connecté';
+
+
+
+    end if;
+
+
+
+
+
+
+
+    -- Vérification des droits
+
+
+
+    if current_role = 'user' then
+
+
+
+        return 'Accès refusé : vous ne pouvez créer aucun utilisateur';
+
+
+
+    elsif current_role = 'admin' and p_role <> 'user' then
+
+
+
+        return 'Accès refusé : un admin ne peut créer que des users';
+
+
+
+    end if;
+
+
+
+
+
+
+
+    -- Insertion sécurisée dans public.users
+
+
+
+    insert into public.users (
+
+
+
+        id,
+
+
+
+        email,
+
+
+
+        nom_user,
+
+
+
+        role,
+
+
+
+        agence_id,
+
+
+
+        created_at
+
+
+
+    )
+
+
+
+    values (
+
+
+
+        p_new_user_id,
+
+
+
+        p_email,
+
+
+
+        p_nom_user,
+
+
+
+        p_role,
+
+
+
+        p_agence_id,
+
+
+
+        now()
+
+
+
+    );
+
+
+
+
+
+
+
+    return 'Utilisateur créé avec succès';
+
+
+
+end;
+
+
+
 $$;
 
 
@@ -138,46 +218,86 @@ $$;
 
 CREATE FUNCTION public.check_create_user_rights(p_role text) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-
-declare
-
-    current_role text;
-
-begin
-
-    select role into current_role
-
-    from public.users
-
-    where id = auth.uid();
-
-
-
-    if current_role is null then
-
-        return 'Utilisateur non connecté';
-
-    end if;
-
-
-
-    if current_role = 'user' then
-
-        return 'Accès refusé : vous ne pouvez créer aucun utilisateur';
-
-    elsif current_role = 'admin' and p_role <> 'user' then
-
-        return 'Accès refusé : un admin ne peut créer que des users';
-
-    end if;
-
-
-
-    return 'ok';
-
-end;
-
+    AS $$
+
+
+
+declare
+
+
+
+    current_role text;
+
+
+
+begin
+
+
+
+    select role into current_role
+
+
+
+    from public.users
+
+
+
+    where id = auth.uid();
+
+
+
+
+
+
+
+    if current_role is null then
+
+
+
+        return 'Utilisateur non connecté';
+
+
+
+    end if;
+
+
+
+
+
+
+
+    if current_role = 'user' then
+
+
+
+        return 'Accès refusé : vous ne pouvez créer aucun utilisateur';
+
+
+
+    elsif current_role = 'admin' and p_role <> 'user' then
+
+
+
+        return 'Accès refusé : un admin ne peut créer que des users';
+
+
+
+    end if;
+
+
+
+
+
+
+
+    return 'ok';
+
+
+
+end;
+
+
+
 $$;
 
 
@@ -188,277 +308,737 @@ $$;
 CREATE FUNCTION public.create_user_secure(p_email text, p_password text, p_nom_user text, p_role text, p_agence_id uuid DEFAULT NULL::uuid) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'auth', 'extensions'
-    AS $$
-
-DECLARE
-
-  v_caller_id UUID;
-
-  v_caller_role TEXT;
-
-  v_new_user_id UUID;
-
-BEGIN
-
-  -- 1. Vérifier que l'appelant est authentifié
-
-  v_caller_id := auth.uid();
-
-  IF v_caller_id IS NULL THEN
-
-    RETURN json_build_object('success', false, 'message', 'Non authentifié');
-
-  END IF;
-
-
-
-  -- 2. Récupérer le rôle de l'appelant depuis public.users
-
-  SELECT role INTO v_caller_role
-
-  FROM public.users
-
-  WHERE id = v_caller_id;
-
-
-
-  IF v_caller_role IS NULL THEN
-
-    RETURN json_build_object('success', false, 'message', 'Profil appelant introuvable');
-
-  END IF;
-
-
-
-  -- 3. Appliquer les règles métier de création
-
-  --    user          → ne peut rien créer
-
-  --    admin         → peut créer uniquement des "user"
-
-  --    super_admin   → peut créer des "admin" et des "user"
-
-  IF v_caller_role = 'user' THEN
-
-    RETURN json_build_object('success', false, 'message', 'Les utilisateurs simples ne peuvent pas créer de comptes');
-
-  END IF;
-
-
-
-  IF v_caller_role = 'admin' AND p_role <> 'user' THEN
-
-    RETURN json_build_object('success', false, 'message', 'Un admin ne peut créer que des utilisateurs de type "user"');
-
-  END IF;
-
-
-
-  IF v_caller_role = 'super_admin' AND p_role NOT IN ('admin', 'user') THEN
-
-    RETURN json_build_object('success', false, 'message', 'Un super_admin ne peut créer que des admin ou des user');
-
-  END IF;
-
-
-
-  -- 4. Vérifier que l'email n'existe pas déjà
-
-  IF EXISTS (SELECT 1 FROM auth.users WHERE email = p_email) THEN
-
-    RETURN json_build_object('success', false, 'message', 'Cet email est déjà utilisé');
-
-  END IF;
-
-
-
-  -- 5. Valider le mot de passe (minimum 6 caractères)
-
-  IF LENGTH(p_password) < 6 THEN
-
-    RETURN json_build_object('success', false, 'message', 'Le mot de passe doit contenir au moins 6 caractères');
-
-  END IF;
-
-
-
-  -- 6. Générer un UUID pour le nouvel utilisateur
-
-  v_new_user_id := gen_random_uuid();
-
-
-
-  -- 7. Insérer dans auth.users (avec TOUS les champs requis par GoTrue)
-
-  INSERT INTO auth.users (
-
-    id,
-
-    instance_id,
-
-    email,
-
-    encrypted_password,
-
-    email_confirmed_at,
-
-    confirmation_sent_at,
-
-    confirmation_token,
-
-    recovery_token,
-
-    email_change_token_new,
-
-    email_change,
-
-    aud,
-
-    role,
-
-    raw_app_meta_data,
-
-    raw_user_meta_data,
-
-    is_super_admin,
-
-    is_sso_user,
-
-    created_at,
-
-    updated_at
-
-  ) VALUES (
-
-    v_new_user_id,
-
-    '00000000-0000-0000-0000-000000000000',
-
-    p_email,
-
-    crypt(p_password, gen_salt('bf')),
-
-    NOW(),
-
-    NOW(),
-
-    '',        -- confirmation_token (vide car déjà confirmé)
-
-    '',        -- recovery_token
-
-    '',        -- email_change_token_new
-
-    '',        -- email_change
-
-    'authenticated',
-
-    'authenticated',
-
-    json_build_object(
-
-      'provider', 'email',
-
-      'providers', ARRAY['email']
-
-    )::jsonb,
-
-    json_build_object('nom_user', p_nom_user)::jsonb,
-
-    false,     -- is_super_admin (géré par public.users)
-
-    false,     -- is_sso_user
-
-    NOW(),
-
-    NOW()
-
-  );
-
-
-
-  -- 8. Créer l'identité email dans auth.identities
-
-  --    (nécessaire pour que l'utilisateur puisse se connecter)
-
-  INSERT INTO auth.identities (
-
-    id,
-
-    user_id,
-
-    provider_id,
-
-    identity_data,
-
-    provider,
-
-    last_sign_in_at,
-
-    created_at,
-
-    updated_at
-
-  ) VALUES (
-
-    v_new_user_id,
-
-    v_new_user_id,
-
-    p_email,
-
-    json_build_object(
-
-      'sub', v_new_user_id::text,
-
-      'email', p_email,
-
-      'email_verified', true,
-
-      'provider', 'email'
-
-    )::jsonb,
-
-    'email',
-
-    NOW(),
-
-    NOW(),
-
-    NOW()
-
-  );
-
-
-
-  -- 9. Insérer dans public.users
-
-  INSERT INTO public.users (id, email, nom_user, role, agence_id, created_at)
-
-  VALUES (v_new_user_id, p_email, p_nom_user, p_role, p_agence_id, NOW());
-
-
-
-  -- 10. Retourner le succès
-
-  RETURN json_build_object(
-
-    'success', true,
-
-    'message', 'Utilisateur créé avec succès',
-
-    'user_id', v_new_user_id
-
-  );
-
-
-
-EXCEPTION WHEN OTHERS THEN
-
-  RETURN json_build_object('success', false, 'message', 'Erreur serveur: ' || SQLERRM);
-
-END;
-
+    AS $$
+
+
+
+DECLARE
+
+
+
+  v_caller_id UUID;
+
+
+
+  v_caller_role TEXT;
+
+
+
+  v_new_user_id UUID;
+
+
+
+BEGIN
+
+
+
+  -- 1. Vérifier que l'appelant est authentifié
+
+
+
+  v_caller_id := auth.uid();
+
+
+
+  IF v_caller_id IS NULL THEN
+
+
+
+    RETURN json_build_object('success', false, 'message', 'Non authentifié');
+
+
+
+  END IF;
+
+
+
+
+
+
+
+  -- 2. Récupérer le rôle de l'appelant depuis public.users
+
+
+
+  SELECT role INTO v_caller_role
+
+
+
+  FROM public.users
+
+
+
+  WHERE id = v_caller_id;
+
+
+
+
+
+
+
+  IF v_caller_role IS NULL THEN
+
+
+
+    RETURN json_build_object('success', false, 'message', 'Profil appelant introuvable');
+
+
+
+  END IF;
+
+
+
+
+
+
+
+  -- 3. Appliquer les règles métier de création
+
+
+
+  --    user          → ne peut rien créer
+
+
+
+  --    admin         → peut créer uniquement des "user"
+
+
+
+  --    super_admin   → peut créer des "admin" et des "user"
+
+
+
+  IF v_caller_role = 'user' THEN
+
+
+
+    RETURN json_build_object('success', false, 'message', 'Les utilisateurs simples ne peuvent pas créer de comptes');
+
+
+
+  END IF;
+
+
+
+
+
+
+
+  IF v_caller_role = 'admin' AND p_role <> 'user' THEN
+
+
+
+    RETURN json_build_object('success', false, 'message', 'Un admin ne peut créer que des utilisateurs de type "user"');
+
+
+
+  END IF;
+
+
+
+
+
+
+
+  IF v_caller_role = 'super_admin' AND p_role NOT IN ('admin', 'user') THEN
+
+
+
+    RETURN json_build_object('success', false, 'message', 'Un super_admin ne peut créer que des admin ou des user');
+
+
+
+  END IF;
+
+
+
+
+
+
+
+  -- 4. Vérifier que l'email n'existe pas déjà
+
+
+
+  IF EXISTS (SELECT 1 FROM auth.users WHERE email = p_email) THEN
+
+
+
+    RETURN json_build_object('success', false, 'message', 'Cet email est déjà utilisé');
+
+
+
+  END IF;
+
+
+
+
+
+
+
+  -- 5. Valider le mot de passe (minimum 6 caractères)
+
+
+
+  IF LENGTH(p_password) < 6 THEN
+
+
+
+    RETURN json_build_object('success', false, 'message', 'Le mot de passe doit contenir au moins 6 caractères');
+
+
+
+  END IF;
+
+
+
+
+
+
+
+  -- 6. Générer un UUID pour le nouvel utilisateur
+
+
+
+  v_new_user_id := gen_random_uuid();
+
+
+
+
+
+
+
+  -- 7. Insérer dans auth.users (avec TOUS les champs requis par GoTrue)
+
+
+
+  INSERT INTO auth.users (
+
+
+
+    id,
+
+
+
+    instance_id,
+
+
+
+    email,
+
+
+
+    encrypted_password,
+
+
+
+    email_confirmed_at,
+
+
+
+    confirmation_sent_at,
+
+
+
+    confirmation_token,
+
+
+
+    recovery_token,
+
+
+
+    email_change_token_new,
+
+
+
+    email_change,
+
+
+
+    aud,
+
+
+
+    role,
+
+
+
+    raw_app_meta_data,
+
+
+
+    raw_user_meta_data,
+
+
+
+    is_super_admin,
+
+
+
+    is_sso_user,
+
+
+
+    created_at,
+
+
+
+    updated_at
+
+
+
+  ) VALUES (
+
+
+
+    v_new_user_id,
+
+
+
+    '00000000-0000-0000-0000-000000000000',
+
+
+
+    p_email,
+
+
+
+    crypt(p_password, gen_salt('bf')),
+
+
+
+    NOW(),
+
+
+
+    NOW(),
+
+
+
+    '',        -- confirmation_token (vide car déjà confirmé)
+
+
+
+    '',        -- recovery_token
+
+
+
+    '',        -- email_change_token_new
+
+
+
+    '',        -- email_change
+
+
+
+    'authenticated',
+
+
+
+    'authenticated',
+
+
+
+    json_build_object(
+
+
+
+      'provider', 'email',
+
+
+
+      'providers', ARRAY['email']
+
+
+
+    )::jsonb,
+
+
+
+    json_build_object('nom_user', p_nom_user)::jsonb,
+
+
+
+    false,     -- is_super_admin (géré par public.users)
+
+
+
+    false,     -- is_sso_user
+
+
+
+    NOW(),
+
+
+
+    NOW()
+
+
+
+  );
+
+
+
+
+
+
+
+  -- 8. Créer l'identité email dans auth.identities
+
+
+
+  --    (nécessaire pour que l'utilisateur puisse se connecter)
+
+
+
+  INSERT INTO auth.identities (
+
+
+
+    id,
+
+
+
+    user_id,
+
+
+
+    provider_id,
+
+
+
+    identity_data,
+
+
+
+    provider,
+
+
+
+    last_sign_in_at,
+
+
+
+    created_at,
+
+
+
+    updated_at
+
+
+
+  ) VALUES (
+
+
+
+    v_new_user_id,
+
+
+
+    v_new_user_id,
+
+
+
+    p_email,
+
+
+
+    json_build_object(
+
+
+
+      'sub', v_new_user_id::text,
+
+
+
+      'email', p_email,
+
+
+
+      'email_verified', true,
+
+
+
+      'provider', 'email'
+
+
+
+    )::jsonb,
+
+
+
+    'email',
+
+
+
+    NOW(),
+
+
+
+    NOW(),
+
+
+
+    NOW()
+
+
+
+  );
+
+
+
+
+
+
+
+  -- 9. Insérer dans public.users
+
+
+
+  INSERT INTO public.users (id, email, nom_user, role, agence_id, created_at)
+
+
+
+  VALUES (v_new_user_id, p_email, p_nom_user, p_role, p_agence_id, NOW());
+
+
+
+
+
+
+
+  -- 10. Retourner le succès
+
+
+
+  RETURN json_build_object(
+
+
+
+    'success', true,
+
+
+
+    'message', 'Utilisateur créé avec succès',
+
+
+
+    'user_id', v_new_user_id
+
+
+
+  );
+
+
+
+
+
+
+
+EXCEPTION WHEN OTHERS THEN
+
+
+
+  RETURN json_build_object('success', false, 'message', 'Erreur serveur: ' || SQLERRM);
+
+
+
+END;
+
+
+
 $$;
+
+-- ============================================================
+-- Fonction RPC sécurisée : update_user_secure
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.update_user_secure(
+  p_user_id UUID,
+  p_email TEXT,
+  p_password TEXT,
+  p_nom_user TEXT,
+  p_role TEXT,
+  p_agence_id UUID DEFAULT NULL,
+  p_old_password TEXT DEFAULT NULL
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  v_caller_id UUID;
+  v_caller_role TEXT;
+  v_caller_agence_id UUID;
+  v_target_role TEXT;
+  v_target_agence_id UUID;
+  v_final_role TEXT;
+  v_final_agence_id UUID;
+  v_email_exists BOOLEAN;
+  v_current_encrypted_password TEXT;
+BEGIN
+  -- 1. Appelan authentication
+  v_caller_id := auth.uid();
+  IF v_caller_id IS NULL THEN
+    RETURN json_build_object('success', false, 'message', 'Non authentifié');
+  END IF;
+
+  -- 2. Caller info
+  SELECT role, agence_id INTO v_caller_role, v_caller_agence_id
+  FROM public.users WHERE id = v_caller_id;
+
+  IF v_caller_role IS NULL THEN
+    RETURN json_build_object('success', false, 'message', 'Profil appelant introuvable');
+  END IF;
+
+  -- 3. Target info
+  SELECT role, agence_id INTO v_target_role, v_target_agence_id
+  FROM public.users WHERE id = p_user_id;
+
+  IF v_target_role IS NULL THEN
+    RETURN json_build_object('success', false, 'message', 'Utilisateur cible introuvable');
+  END IF;
+
+  -- Initialize final role and agence to requested values
+  v_final_role := p_role;
+  v_final_agence_id := p_agence_id;
+
+  -- 4. Apply Business Rules
+  IF v_caller_role = 'user' THEN
+    IF p_user_id != v_caller_id THEN
+      RETURN json_build_object('success', false, 'message', 'Non autorisé à modifier un autre utilisateur');
+    END IF;
+    -- User cannot change their own role or agence
+    v_final_role := v_target_role;
+    v_final_agence_id := v_target_agence_id;
+
+  ELSIF v_caller_role = 'admin' THEN
+    IF p_user_id = v_caller_id THEN
+      -- Admin modifying self: cannot change role
+      v_final_role := v_target_role;
+      -- Usually admin shouldn't change their own agence without Super-Admin, but let's lock it
+      v_final_agence_id := v_target_agence_id;
+    ELSE
+      -- Admin modifying someone else
+      IF v_target_role IN ('super_admin', 'admin') THEN
+        RETURN json_build_object('success', false, 'message', 'Un admin ne peut modifier que les utilisateurs simples');
+      END IF;
+      -- Perimeter check
+      IF v_target_agence_id IS DISTINCT FROM v_caller_agence_id THEN
+        RETURN json_build_object('success', false, 'message', 'Cet utilisateur n''est pas dans votre agence');
+      END IF;
+      -- Cannot elevate to admin/super_admin
+      IF p_role IN ('admin', 'super_admin') THEN
+        RETURN json_build_object('success', false, 'message', 'Un admin ne peut pas attribuer de rôle supérieur');
+      END IF;
+      -- Cannot move user to another agence
+      IF p_agence_id IS DISTINCT FROM v_caller_agence_id THEN
+        RETURN json_build_object('success', false, 'message', 'Un admin ne peut assigner que sa propre agence');
+      END IF;
+    END IF;
+
+  ELSIF v_caller_role = 'super_admin' THEN
+    -- Super-admin modifying someone else
+    IF p_user_id != v_caller_id THEN
+      IF v_target_role = 'super_admin' THEN
+        RETURN json_build_object('success', false, 'message', 'Un super_admin ne peut pas modifier un autre super_admin');
+      END IF;
+    END IF;
+    -- Only 'user', 'admin' and 'super_admin' roles are valid
+    IF p_role NOT IN ('user', 'admin', 'super_admin') THEN
+      RETURN json_build_object('success', false, 'message', 'Rôle invalide');
+    END IF;
+    
+    -- Super-Admin modifying self cannot downgrade their own role
+    IF p_user_id = v_caller_id AND p_role != 'super_admin' THEN
+      RETURN json_build_object('success', false, 'message', 'Un super_admin ne peut pas se retirer ses propres privilèges');
+    END IF;
+  END IF;
+
+  -- 5. Email uniqueness check
+  SELECT EXISTS (
+    SELECT 1 FROM auth.users WHERE email = p_email AND id != p_user_id
+  ) INTO v_email_exists;
+
+  IF v_email_exists THEN
+    RETURN json_build_object('success', false, 'message', 'Cet email est déjà utilisé par un autre compte');
+  END IF;
+
+  -- 6. Password validation (if provided)
+  IF p_password IS NOT NULL AND TRIM(p_password) != '' THEN
+    IF LENGTH(p_password) < 6 THEN
+      RETURN json_build_object('success', false, 'message', 'Le nouveau mot de passe doit contenir au moins 6 caractères');
+    END IF;
+
+    -- If user is updating their OWN password, verify old password
+    IF p_user_id = v_caller_id THEN
+      IF p_old_password IS NULL OR TRIM(p_old_password) = '' THEN
+        RETURN json_build_object('success', false, 'message', 'Veuillez saisir votre ancien mot de passe pour le modifier');
+      END IF;
+
+      SELECT encrypted_password INTO v_current_encrypted_password
+      FROM auth.users WHERE id = p_user_id;
+
+      IF crypt(p_old_password, v_current_encrypted_password) != v_current_encrypted_password THEN
+        RETURN json_build_object('success', false, 'message', 'L''ancien mot de passe est incorrect');
+      END IF;
+    END IF;
+  END IF;
+
+  -- 7. Update auth.users (email, password, metadata)
+  IF p_password IS NOT NULL AND TRIM(p_password) != '' THEN
+    UPDATE auth.users
+    SET 
+      email = p_email,
+      encrypted_password = crypt(p_password, gen_salt('bf')),
+      raw_user_meta_data = jsonb_set(COALESCE(raw_user_meta_data, '{}'::jsonb), '{nom_user}', to_jsonb(p_nom_user)),
+      updated_at = NOW()
+    WHERE id = p_user_id;
+  ELSE
+    UPDATE auth.users
+    SET 
+      email = p_email,
+      raw_user_meta_data = jsonb_set(COALESCE(raw_user_meta_data, '{}'::jsonb), '{nom_user}', to_jsonb(p_nom_user)),
+      updated_at = NOW()
+    WHERE id = p_user_id;
+  END IF;
+
+  -- Update auth.identities
+  UPDATE auth.identities
+  SET 
+    identity_data = jsonb_set(identity_data, '{email}', to_jsonb(p_email)),
+    updated_at = NOW()
+  WHERE user_id = p_user_id AND provider = 'email';
+
+  -- 8. Update public.users
+  UPDATE public.users
+  SET 
+    email = p_email,
+    nom_user = p_nom_user,
+    role = v_final_role,
+    agence_id = v_final_agence_id
+  WHERE id = p_user_id;
+
+  RETURN json_build_object(
+    'success', true,
+    'message', 'Utilisateur mis à jour avec succès'
+  );
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object('success', false, 'message', 'Erreur serveur: ' || SQLERRM);
+END;
+$$;
+
+-- Sécuriser les permissions d'exécution
+REVOKE ALL ON FUNCTION public.update_user_secure(UUID, TEXT, TEXT, TEXT, TEXT, UUID, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.update_user_secure(UUID, TEXT, TEXT, TEXT, TEXT, UUID, TEXT) FROM anon;
+GRANT EXECUTE ON FUNCTION public.update_user_secure(UUID, TEXT, TEXT, TEXT, TEXT, UUID, TEXT) TO authenticated;
+
+-- Recharger le cache
+NOTIFY pgrst, 'reload schema';
+
 
 
 --
@@ -467,34 +1047,62 @@ $$;
 
 CREATE FUNCTION public.get_current_user_role() RETURNS text
     LANGUAGE plpgsql
-    AS $$
-
-declare
-
-    current_role text;
-
-begin
-
-    select role into current_role
-
-    from public.users
-
-    where id = auth.uid();
-
-
-
-    if current_role is null then
-
-        return 'Utilisateur non connecté';
-
-    end if;
-
-
-
-    return current_role;
-
-end;
-
+    AS $$
+
+
+
+declare
+
+
+
+    current_role text;
+
+
+
+begin
+
+
+
+    select role into current_role
+
+
+
+    from public.users
+
+
+
+    where id = auth.uid();
+
+
+
+
+
+
+
+    if current_role is null then
+
+
+
+        return 'Utilisateur non connecté';
+
+
+
+    end if;
+
+
+
+
+
+
+
+    return current_role;
+
+
+
+end;
+
+
+
 $$;
 
 
@@ -505,10 +1113,14 @@ $$;
 CREATE FUNCTION public.get_my_agence() RETURNS uuid
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
-
-  SELECT agence_id FROM public.users WHERE id = auth.uid();
-
+    AS $$
+
+
+
+  SELECT agence_id FROM public.users WHERE id = auth.uid();
+
+
+
 $$;
 
 
@@ -519,10 +1131,14 @@ $$;
 CREATE FUNCTION public.get_my_role() RETURNS text
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
-
-  SELECT role FROM public.users WHERE id = auth.uid();
-
+    AS $$
+
+
+
+  SELECT role FROM public.users WHERE id = auth.uid();
+
+
+
 $$;
 
 
@@ -532,39 +1148,72 @@ $$;
 
 CREATE FUNCTION public.vote_satisfaction(p_agence_id uuid, p_nom_guichet character varying, p_score integer, p_device_id character varying) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-DECLARE
-    v_ticket_numero VARCHAR;
-BEGIN
-    -- ÉTAPE A : Le backend cherche tout seul s'il y a un ticket en cours à ce guichet
-    SELECT numero_ticket INTO v_ticket_numero
-    FROM public.ticket
-    WHERE agence_id = p_agence_id 
-      AND nom_guichet = p_nom_guichet
-      AND status = 'called' -- Statut du ticket actif
-    ORDER BY created_at DESC
-    LIMIT 1;
-
-    -- Si le guichet est vide (aucun client sélectionné), on bloque le vote pour éviter les faux-positifs
-    IF v_ticket_numero IS NULL THEN
-        RETURN json_build_object('success', false, 'error', 'Aucun ticket n''est actuellement "En cours" ("called") sur ce guichet.');
-    END IF;
-
-    -- ÉTAPE B : Si un ticket a été trouvé, on enregistre ou met à jour le vote dans 'evaluations' (UPSERT)
-    INSERT INTO public.evaluations (ticket_numero, device_id, score)
-    VALUES (v_ticket_numero, p_device_id, p_score)
-    ON CONFLICT (ticket_numero) 
-    DO UPDATE SET 
-        score = EXCLUDED.score,
-        device_id = EXCLUDED.device_id,
-        created_at = timezone('utc'::text, now());
-
-    -- On renvoie un succès de la tablette, avec le numéro du ticket évalué pour info
-    RETURN json_build_object('success', true, 'ticket_numero', v_ticket_numero, 'message', 'Vote pris en compte ou mis à jour avec succès.');
-EXCEPTION WHEN OTHERS THEN
-    -- En cas d'erreur serveur inattendue
-    RETURN json_build_object('success', false, 'error', SQLERRM);
-END;
+    AS $$
+
+DECLARE
+
+    v_ticket_numero VARCHAR;
+
+BEGIN
+
+    -- ÉTAPE A : Le backend cherche tout seul s'il y a un ticket en cours à ce guichet
+
+    SELECT numero_ticket INTO v_ticket_numero
+
+    FROM public.ticket
+
+    WHERE agence_id = p_agence_id 
+
+      AND nom_guichet = p_nom_guichet
+
+      AND status = 'called' -- Statut du ticket actif
+
+    ORDER BY created_at DESC
+
+    LIMIT 1;
+
+
+
+    -- Si le guichet est vide (aucun client sélectionné), on bloque le vote pour éviter les faux-positifs
+
+    IF v_ticket_numero IS NULL THEN
+
+        RETURN json_build_object('success', false, 'error', 'Aucun ticket n''est actuellement "En cours" ("called") sur ce guichet.');
+
+    END IF;
+
+
+
+    -- ÉTAPE B : Si un ticket a été trouvé, on enregistre ou met à jour le vote dans 'evaluations' (UPSERT)
+
+    INSERT INTO public.evaluations (ticket_numero, device_id, score)
+
+    VALUES (v_ticket_numero, p_device_id, p_score)
+
+    ON CONFLICT (ticket_numero) 
+
+    DO UPDATE SET 
+
+        score = EXCLUDED.score,
+
+        device_id = EXCLUDED.device_id,
+
+        created_at = timezone('utc'::text, now());
+
+
+
+    -- On renvoie un succès de la tablette, avec le numéro du ticket évalué pour info
+
+    RETURN json_build_object('success', true, 'ticket_numero', v_ticket_numero, 'message', 'Vote pris en compte ou mis à jour avec succès.');
+
+EXCEPTION WHEN OTHERS THEN
+
+    -- En cas d'erreur serveur inattendue
+
+    RETURN json_build_object('success', false, 'error', SQLERRM);
+
+END;
+
 $$;
 
 
